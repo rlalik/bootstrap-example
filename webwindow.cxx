@@ -12,9 +12,13 @@
 
 #include <ROOT/RWebWindow.hxx>
 
-#include "TCanvas.h"
-#include "TWebCanvas.h"
-#include "TTimer.h"
+#include <TCanvas.h>
+#include <TWebCanvas.h>
+#include <TTimer.h>
+#include <TH1.h>
+#include <TClass.h>
+#include <TROOT.h>
+#include <TApplication.h>
 
 std::shared_ptr<ROOT::RWebWindow> window;
 
@@ -132,12 +136,20 @@ void ProcessData(unsigned connid, const std::string &arg)
    }
 }
 
+std::atomic_bool run_thread{true};
+
 void update_canvas()
 {
-   hist->FillRandom("gaus", 5000);
-   canvas->Modified();
-   canvas->Update();
+   while (run_thread) {
+      hist->FillRandom("gaus", 5000);
+      canvas->Modified();
+      canvas->Update();
+
+      std::this_thread::sleep_for(std::chrono::milliseconds(2000));
+   }
 }
+
+std::thread * random_fill{nullptr};
 
 void webwindow()
 {
@@ -150,10 +162,7 @@ void webwindow()
    hist->FillRandom("gaus", 10000);
    canvas->Add(hist);
 
-
-   auto timer = new TTimer("update_canvas()", 2000, kFALSE);
-   timer->TurnOn();
-
+   random_fill = new std::thread(update_canvas);
 
    // configure default html page
    // either HTML code can be specified or just name of file after 'file:' prefix
@@ -171,4 +180,15 @@ void webwindow()
    window->SetGeometry(1200, 800); // configure predefined geometry
 
    window->Show();
+}
+
+int main(int argc, char* argv[]) {
+    TApplication app("app", &argc, argv);
+    webwindow();
+    app.Run();
+
+    run_thread = false;
+    random_fill->join();
+
+    return 0;
 }
